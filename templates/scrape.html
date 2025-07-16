@@ -1,0 +1,23 @@
+<!-- templates/scrape.html -->
+{% extends "base.html" %} {% block content %}
+<h2>DoorDash Scraper</h2>
+<form method="post" class="mb-3">
+  <div class="input-group">
+    <input
+      type="url"
+      name="store_url"
+      class="form-control"
+      placeholder="https://www.doordash.com/store/…"
+      required
+    />
+    <button class="btn btn-primary">Scrape &amp; Push to Sheets</button>
+  </div>
+</form>
+
+{% if sheet_link %}
+<div class="mt-3">
+  <strong>Last run:</strong>
+  <a href="{{ sheet_link }}" target="_blank">{{ sheet_link }}</a>
+  (tab “{{ tab_name }}”)
+</div>
+{% endif %} {% endblock %}

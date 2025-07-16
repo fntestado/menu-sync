@@ -1,0 +1,20 @@
+[
+    { "name": "__hssc", "value": "186325750.1.1752568963350", "domain": ".orders.co", "path": "/" },
+    { "name": "__hssrc", "value": "1", "domain": ".orders.co", "path": "/" },
+    { "name": "__hstc", "value": "186325750.22f935888194006ed6a4cda7f855263c.1752300549884.1752300549884.1752568963350.2", "domain": ".orders.co", "path": "/" },
+    { "name": "_fbp", "value": "fb.1.1752300550032.404861196662424770", "domain": ".orders.co", "path": "/" },
+    { "name": "_ga", "value": "GA1.1.1829103220.1752300550", "domain": ".orders.co", "path": "/" },
+    { "name": "_ga_ZR96LQD96G", "value": "GS2.1.s1752568963$o2$g0$t1752568972$j51$l0$h514901509", "domain": ".orders.co", "path": "/" },
+    { "name": "_gcl_au", "value": "1.1.2127775805.1752300549", "domain": ".orders.co", "path": "/" },
+    { "name": "_gid", "value": "GA1.2.1100340201.1752568963", "domain": ".orders.co", "path": "/" },
+    { "name": "ajs_anonymous_id", "value": "306f6689-3c69-4c7a-91f3-b2349965971a", "domain": ".orders.co", "path": "/" },
+    { "name": "calltrk_landing", "value": "https%3A//orders.co/", "domain": ".orders.co", "path": "/" },
+    { "name": "calltrk_referrer", "value": "direct", "domain": ".orders.co", "path": "/" },
+    { "name": "calltrk_session_id", "value": "5a38f688-2988-4023-a13d-f1668fbc261e", "domain": ".orders.co", "path": "/" },
+    { "name": "FPAU", "value": "1.1.2127775805.1752300549", "domain": ".orders.co", "path": "/" },
+    { "name": "FPID", "value": "FPID2.2.0qT8ZSBU3v%2B2AZS3zHnYjEcXDjlySNGji0TAcrHYpws%3D.1752300550", "domain": ".orders.co", "path": "/" },
+    { "name": "FPLC", "value": "2IqO2eHQXEjJbSjCpZFmk0w6LVQBoTH8exs6qi5MMEb8ppqUDnmNrqeXCtCN4kbv1%2Fy7bE1ITK75IKpmDW1X11re90SqLMKLUwmCkdiMnoKy0aA3S2j0Q3zpfV%2Fg2w%3D%3D", "domain": ".orders.co", "path": "/" },
+    { "name": "hubspotutk", "value": "22f935888194006ed6a4cda7f855263c", "domain": ".orders.co", "path": "/" },
+    { "name": "messagesUtk", "value": "76c57e95bd8c49459f4387bbb6cb20d7", "domain": ".orders.co", "path": "/" },
+    { "name": "SL_C_23361dd035530_SID", "value": "{\"05352c06ed92897626e28806bca50f205778dbaa\":{\"sessionId\":\"-wxS3yfwUq2wqApHIxtIs\",\"visitorId\":\"nhDXyUtrMnxq6crwvTHrx\"}}", "domain": ".orders.co", "path": "/" }
+  ]

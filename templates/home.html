@@ -1,0 +1,12 @@
+{% extends "base.html" %} {% block content %}
+<div class="text-center">
+  <h1>Welcome!</h1>
+  <p>What would you like to do today?</p>
+  <a href="{{ url_for('scrape') }}" class="btn btn-lg btn-primary mx-2"
+    >Scrape DoorDash</a
+  >
+  <a href="{{ url_for('upload') }}" class="btn btn-lg btn-success mx-2"
+    >Upload to Orders.co</a
+  >
+</div>
+{% endblock %}

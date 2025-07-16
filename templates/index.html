@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <title>DoorDash Scraper</title>
+  </head>
+  <body>
+    <h1>DoorDash Menu Scraper</h1>
+    <form method="post">
+      <input name="store_url" placeholder="Store URL" size="60" />
+      <button type="submit">Scrape & Upload</button>
+    </form>
+
+    {% if error %}
+    <p style="color: red">{{ error }}</p>
+    {% endif %} {% if sheet_link %}
+    <p>
+      ✅ Uploaded to
+      <a href="{{ sheet_link }}" target="_blank">Google Sheet</a>, tab “{{
+      tab_name }}”.
+    </p>
+    {% endif %} {% if csv_file %}
+    <p>
+      ⬇️
+      <a href="{{ url_for('download_file', filename=csv_file) }}"
+        >Download CSV: {{ csv_file }}</a
+      >
+    </p>
+    {% endif %}
+  </body>
+</html>

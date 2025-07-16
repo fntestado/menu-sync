@@ -1,0 +1,12 @@
+[  
+  {  
+    "name": "singular_device_id",
+    "value": "7b7a80ed-8a03-401e-a827-4165f5b6fa20",
+    "domain": ".doordash.com",
+    "path": "/",
+    "expires": 1784280367.000,
+    "httpOnly": false,
+    "secure": true,
+    "sameSite": "Lax"
+  }
+]
