@@ -17,34 +17,21 @@ class NotLoggedInError(Exception):
     pass
 
 def select_brand_and_location(page, brand: str, location: str):
-    # 1) open the picker and scope into the popover
     page.click("button#businessNewListAll")
     pop = page.locator(".MuiPopover-paper")
     pop.wait_for(state="visible")
 
-    # 2) pick the brand
+    # pick the brand
     pop.locator("ul").first.locator(f"li:has-text('{brand}')").click()
     page.wait_for_timeout(500)
 
-    # 3) filter the locations
+    # type in the location filter
+    snippet = ", ".join(location.split(",")[:2])  # e.g. "35-35 Leverich Street b522, NY 11372"
     loc_textarea = pop.locator('textarea[placeholder="All Locations..."]').first
-    loc_textarea.fill("")  
-    # type a shorter, distinctive chunk to make matching reliable:
-    # e.g. drop trailing punctuation, country, etc.
-    snippet = ", ".join(location.split(",")[:2])  # "35-35 Leverich Street b522, NY 11372"
+    loc_textarea.fill("")
     loc_textarea.type(snippet, delay=50)
 
-    # 4) wait specifically for a real entry (not the “No options” placeholder)
-    real_loc = pop.locator(
-        "ul:nth-of-type(2) li.MuiListItem-root:not(:has-text('No options'))"
-    )
-    try:
-        real_loc.first.wait_for(state="visible", timeout=5000)
-    except TimeoutError:
-        raise RuntimeError(f"No matching location found for “{location}” (tried “{snippet}”)")
-    real_loc.first.click()
-
-    # 5) apply
+    # immediately apply—Orders.co will auto-select the top match
     pop.locator("button#businessList, button:has-text('Apply')").click()
     page.wait_for_timeout(1000)
 
@@ -62,7 +49,7 @@ def upload_to_orders(csv_path: str, brand: str, location: str):
     df = pd.read_csv(csv_path)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         context = (
             browser.new_context(storage_state=COOKIES_FILE)
             if os.path.exists(COOKIES_FILE)
