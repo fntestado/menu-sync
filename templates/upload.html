@@ -67,7 +67,7 @@ block content %}
     locSelect.innerHTML = '<option value="" disabled selected>Choose a location…</option>';
     locs.forEach(l => {
       const opt = document.createElement('option');
-      opt.value = `${l.name} , ${l.address}`;
+      opt.value = `${l.address}`;
       opt.textContent = `${l.name} — ${l.address}`;
       locSelect.appendChild(opt);
     });
