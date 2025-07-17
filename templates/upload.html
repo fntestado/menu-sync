@@ -1,8 +1,8 @@
-<!-- templates/upload.html -->
 {% extends "base.html" %} {% block title %}Orders.co Uploader{% endblock %} {%
 block content %}
 <h2>Orders.co Menu Uploader</h2>
-<form method="post" enctype="multipart/form-data">
+
+<form id="upload-form" enctype="multipart/form-data">
   <button name="action" value="login" class="btn btn-secondary mb-3">
     Log in to Orders.co
   </button>
@@ -20,8 +20,90 @@ block content %}
       required
     />
   </div>
-  <button name="action" value="upload" class="btn btn-primary">
-    Upload CSV to Orders.co
-  </button>
+
+  <!-- Brand selector -->
+  <div class="mb-3">
+    <label for="brand" class="form-label">Brand:</label>
+    <select id="brand" name="brand" class="form-select" required>
+      <option value="" disabled selected>Choose a brand…</option>
+      {% for b in brands_and_locs.keys() %}
+      <option value="{{ b|e }}">{{ b }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Location selector -->
+  <div class="mb-3">
+    <label for="location" class="form-label">Location:</label>
+    <select id="location" name="location" class="form-select" required>
+      <option value="" disabled selected>Select a brand first</option>
+    </select>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Upload CSV to Orders.co</button>
 </form>
+
+<!-- Live logs area, hidden until we start -->
+<div id="log-container" class="mt-4" style="display: none">
+  <label for="logs" class="form-label">⏱️ Live Logs</label>
+  <textarea id="logs" class="form-control" rows="15" readonly></textarea>
+</div>
+
+<script>
+  // 1) Populate location dropdown when brand changes
+  const data = {{ brands_and_locs|tojson }};
+  const brandSelect = document.getElementById('brand');
+  const locSelect   = document.getElementById('location');
+
+  brandSelect.addEventListener('change', () => {
+    const locs = data[brandSelect.value] || [];
+    locSelect.innerHTML = '';
+
+    if (!locs.length) {
+      locSelect.innerHTML = '<option value="" disabled>No locations</option>';
+      return;
+    }
+
+    locSelect.innerHTML = '<option value="" disabled selected>Choose a location…</option>';
+    locs.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = `${l.name} , ${l.address}`;
+      opt.textContent = `${l.name} — ${l.address}`;
+      locSelect.appendChild(opt);
+    });
+  });
+
+  // 2) Submit via fetch and stream logs
+  document.getElementById('upload-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const form = e.target;
+    const formData = new FormData(form);
+    // show and clear logs
+    const logContainer = document.getElementById('log-container');
+    const logBox = document.getElementById('logs');
+    logBox.value = '';
+    logContainer.style.display = 'block';
+
+    const resp = await fetch('{{ url_for("upload_stream") }}', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!resp.ok) {
+      logBox.value = `❌ Upload failed: ${resp.statusText}`;
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      logBox.value += decoder.decode(value);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+  });
+</script>
 {% endblock %}

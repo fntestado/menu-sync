@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Full DoorDash Menu Scraper:
+Full DoorDash Menu Scraper with Proxy Support:
 1) Uses undetected-chromedriver + Selenium to load and lazy-scroll the store page,
-   then saves a prettified HTML dump to page.html.
-2) Parses that prettified HTML with BeautifulSoup + regex/JSON-LD to extract
-   menu items + images, writing results to doordash_menu_with_images.csv.
+   through a residential proxy to bypass Cloudflare.
+2) Runs inside a virtual X display on UI-less VPS.
+3) Parses menu items + images and outputs CSV.
 """
 import json
 import re
@@ -13,25 +13,23 @@ import csv
 import time
 import shutil
 import os
-import cloudscraper
+import manualv2
+from urllib.parse import urlparse
+
 from bs4 import BeautifulSoup
+from pyvirtualdisplay import Display
 import undetected_chromedriver as uc
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
 from selenium_stealth import stealth
-from urllib.parse import urlparse
-from manualv2 import SERVICE_ACCOUNT_FILE, SPREADSHEET_ID, SCOPES, OUTPUT_CSV
 
-import manualv2
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────
 STORE_URL   = "https://www.doordash.com/store/erika's-flowers-&-events-white-plains-30717958/40935151/"
-COOKIE_FILE = "cookies.json"              # Optional session cookies
+COOKIE_FILE = "cookies.json"
 OUTPUT_CSV  = "doordash_menu_with_images.csv"
-PAGE_HTML   = "page_new.html"                 # Prettified HTML dump
+PAGE_HTML   = "page_new.html"
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_cookies(path):
@@ -43,7 +41,6 @@ def load_cookies(path):
 
 
 def save_prettified_html(raw_html, path=PAGE_HTML):
-    """Prettify and save the full page HTML for offline inspection."""
     soup = BeautifulSoup(raw_html, 'html.parser')
     pretty = soup.prettify()
     with open(path, 'w', encoding='utf-8') as f:
@@ -55,12 +52,10 @@ def clean_image_url(url):
     if not url:
         return ''
     base = url.split('?',1)[0]
-    parsed = urlparse(base)
-    return base if parsed.scheme in ('http','https') else ''
+    return base if urlparse(base).scheme in ('http','https') else ''
 
 
 def extract_items(text, typename):
-    """Brace-counting JSON extractor for __typename blobs."""
     items = []
     pat = rf'"__typename"\s*:\s*"{typename}"'
     for m in re.finditer(pat, text):
@@ -87,116 +82,73 @@ def extract_items(text, typename):
 
 
 def build_image_lookup(html):
-    """
-    Build a name→image URL map by scanning:
-      A) StorePageCarouselItem + MenuPageItem JSON blobs
-      B) Next.js __NEXT_DATA__ Apollo cache
-      C) Quick name+imageUrl regex
-      D) <img alt="Name" ...> tags
-      E) inline background-image styles
-    """
     lookup = {}
     soup = BeautifulSoup(html, 'html.parser')
     text = html
-
     # A) GraphQL blobs
     for blob in extract_items(text, 'StorePageCarouselItem') + extract_items(text, 'MenuPageItem'):
         name = blob.get('name','').strip()
         url  = blob.get('imgUrl') or blob.get('imageUrl') or ''
         if name and url:
-            lookup.setdefault(name, clean_image_url(url.strip()))
-
+            lookup.setdefault(name, clean_image_url(url))
     # B) Apollo cache
     nd = soup.find('script', id='__NEXT_DATA__')
     if nd and nd.string:
         try:
             data = json.loads(nd.string)
             ap = data.get('props',{}).get('apolloState',{}) or {}
-            added = 0
             for obj in ap.values():
                 if isinstance(obj, dict) and obj.get('__typename') in ('StorePageCarouselItem','MenuPageItem'):
                     name = obj.get('name','').strip()
                     url  = obj.get('imgUrl') or obj.get('imageUrl') or ''
                     if name and url and name not in lookup:
-                        lookup[name] = clean_image_url(url.strip())
-                        added += 1
-            if added:
-                print(f"↳ Added {added} images from Apollo cache")
+                        lookup[name] = clean_image_url(url)
         except Exception:
             pass
-
     # C) regex fallback
     for m in re.finditer(r'{\s*"name"\s*:\s*"([^"]+)"[^}]+?"imageUrl"\s*:\s*"([^"]+)"', text):
-        n,u = m.group(1).strip(), m.group(2).strip()
-        lookup.setdefault(n, clean_image_url(u))
-
-    # D) <img alt=...>
+        lookup.setdefault(m.group(1).strip(), clean_image_url(m.group(2).strip()))
+    # D/E) <img> + style
     for img in soup.find_all('img', alt=True):
         n = img['alt'].strip()
-        if not n or n in lookup:
-            continue
-        for attr in ('src','data-src','data-lazy-src'):
-            v = img.get(attr)
-            if v:
-                lookup[n] = clean_image_url(v)
-                break
-        else:
-            ss = img.get('srcset','').split(',')
-            if ss and ss[0].strip():
-                lookup[n] = clean_image_url(ss[0].split()[0])
-
-    # E) inline background-image
-    style_re = re.compile(r'url\(["\']?(https?://[^)"\']+)')
-    for el in soup.find_all(style=True):
-        m = style_re.search(el['style'])
-        if not m:
-            continue
-        name = (el.get('aria-label') or el.get('title') or el.get('alt') or '').strip()
-        if name and name not in lookup:
-            lookup[name] = clean_image_url(m.group(1))
-
+        if n and n not in lookup:
+            for attr in ('src','data-src','data-lazy-src'):
+                v = img.get(attr)
+                if v:
+                    lookup[n] = clean_image_url(v); break
     print(f"↳ Total images in lookup: {len(lookup)}")
     return lookup
 
 
 def extract_menu_items(html):
-    """Parse JSON-LD menu and enrich with images from lookup."""
     soup = BeautifulSoup(html, 'html.parser')
-    # find JSON-LD
     menu = None
     for s in soup.find_all('script', type='application/ld+json'):
         try:
             jd = json.loads(s.string or s.get_text() or '')
             if jd.get('@type')=='Restaurant' and 'hasMenu' in jd:
                 menu = jd['hasMenu']; break
-        except:
-            pass
+        except: pass
     if not menu:
         raise RuntimeError("Could not find JSON-LD menu")
-
-    # flatten
     secs = menu.get('hasMenuSection', [])
     if secs and isinstance(secs[0], list):
-        secs = [sec for sub in secs for sec in sub]
-
+        secs = [sub for sec in secs for sub in (sec if isinstance(sec, list) else [sec])]
     lookup = build_image_lookup(html)
     rows = []
     for sec in secs:
         cat = sec.get('name','').strip()
         for mi in sec.get('hasMenuItem', []):
-            nm   = mi.get('name','').strip()
-            if not nm:
-                continue
+            nm = mi.get('name','').strip()
+            if not nm: continue
             desc = mi.get('description','').strip()
-            price = re.sub(r'[^\d.]', '', str(mi.get('offers',{}).get('price','0')))
+            price = re.sub(r'[^\d.]','', str(mi.get('offers',{}).get('price','0')))
             rows.append({
-                'Category':cat,
-                'Name':nm,
-                'Description':desc,
-                'Price (USD)':price,
-                'Image URL': lookup.get(nm, '')
+                'Category':cat, 'Name':nm,
+                'Description':desc, 'Price (USD)':price,
+                'Image URL': lookup.get(nm,'')
             })
-    print(f"✅ Parsed {len(rows)} menu items from JSON-LD + images")
+    print(f"✅ Parsed {len(rows)} menu items")
     return rows
 
 
@@ -207,82 +159,76 @@ def save_to_csv(rows, path=OUTPUT_CSV):
     got = sum(1 for r in rows if r.get('Image URL'))
     print(f"💾 Saved {len(rows)} rows ({got} images) to {path}")
 
+
 def scrape_and_extract(seed_ui: bool = False):
     """
-    Fetch & prettify the menu page, retrying once with UI if headless fails.
-    seed_ui=True forces headed Chrome (for CF cookie seeding).
+    Fetch & prettify the menu page via Selenium+uc through proxy,
+    inside a virtual X display so it runs on a UI-less VPS.
     """
-    opts = uc.ChromeOptions()
-    # headless unless explicitly seeded UI
-    opts.headless = not seed_ui
-    opts.add_argument("--no-sandbox")
-    opts.add_argument("--disable-dev-shm-usage")
-    opts.add_argument("--disable-gpu")
-    opts.add_argument("--window-size=1920,1080")
-    # override headless UA token
-    opts.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/96.0.4664.110 Safari/537.36"
-    )
-
-    mode = "headed" if seed_ui else "headless"
-    print(f"🔎 Starting {mode} Chrome…")
-
-    driver = uc.Chrome(options=opts)
-    # patch navigator webdriver and other flags
-    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-        "source": (
-            "Object.defineProperty(navigator, 'webdriver', {get:() => undefined});"
-            "window.navigator.chrome = {runtime:{}};"
-            "Object.defineProperty(navigator, 'plugins', {get:() => [1,2,3,4,5]});"
-            "Object.defineProperty(navigator, 'languages', {get:() => ['en-US','en']});"
-        )
-    })
-
-    raw = None
-    try:
-        driver.get("https://www.doordash.com")
-        for ck in load_cookies(COOKIE_FILE):
-            try:
-                driver.add_cookie(ck)
-            except:
-                pass
-
-        driver.get(STORE_URL)
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.TAG_NAME, 'body'))
+    with Display(visible=0, size=(1920, 1080)):
+        opts = uc.ChromeOptions()
+        # opts.add_argument(f"--proxy-server={PROXY}")
+        # opts.headless = not seed_ui
+        # opts.add_argument("--no-sandbox")
+        # opts.add_argument("--disable-dev-shm-usage")
+        # opts.add_argument("--disable-gpu")
+        # opts.add_argument("--window-size=1920,1080")
+        opts.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/96.0.4664.110 Safari/537.36"
         )
 
-        # lazy scroll to force rendering
-        for _ in range(5):
-            driver.execute_script("window.scrollBy(0, document.body.scrollHeight/5)")
-            time.sleep(1)
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
-        time.sleep(2)
+        mode = "headed" if seed_ui else "headless"
+        print(f"🔎 Starting {mode} Chrome via proxy…")
+        driver = uc.Chrome(options=opts)
+        # stealth fingerprinting
+        stealth(driver,
+                languages=["en-US","en"], vendor="Google Inc.",
+                platform="Win32", webgl_vendor="Intel Inc.",
+                renderer="Intel Iris OpenGL Engine", fix_hairline=True)
 
-        # wait up to 30s for JSON-LD marker
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            raw = driver.page_source
-            if '"@type":"Restaurant"' in raw and '"hasMenu"' in raw:
-                break
+        raw = None
+        try:
+            driver.get("https://www.doordash.com")
+            for ck in load_cookies(COOKIE_FILE):
+                try: driver.add_cookie(ck)
+                except: pass
+            driver.get(STORE_URL)
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.TAG_NAME, 'body'))
+            )
+            for _ in range(5):
+                driver.execute_script("window.scrollBy(0, document.body.scrollHeight/5)")
+                time.sleep(1)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(2)
-        else:
-            raise RuntimeError("Could not find JSON-LD menu after waiting 30s")
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                raw = driver.page_source
+                if '"@type":"Restaurant"' in raw and '"hasMenu"' in raw:
+                    break
+                time.sleep(2)
+            else:
+                raise RuntimeError("JSON-LD menu not found after 30s")
+        except Exception:
+            driver.quit()
+            if not seed_ui:
+                print("⚠️ Headless failed, retrying headed…")
+                return scrape_and_extract(seed_ui=True)
+            raise
+        finally:
+            if raw: save_prettified_html(raw)
+            driver.quit()
 
-    except Exception as err:
-        driver.quit()
-        if not seed_ui:
-            print("⚠️ Headless failed, retrying in headed mode…")
-            return scrape_and_extract(seed_ui=True)
-        raise
-    finally:
-        if raw:
-            save_prettified_html(raw)
-        driver.quit()
+        return extract_menu_items(raw)
 
-    return extract_menu_items(raw)
+
+# def run(store_url):
+#     global STORE_URL; STORE_URL = store_url
+#     rows = scrape_and_extract()
+#     save_to_csv(rows)
+#     shutil.copy(OUTPUT_CSV, f"{rows[0]['Category']}.csv")
 
 def run(store_url):
     """
@@ -313,10 +259,5 @@ def run(store_url):
 
     return sheet_url, tab_name, csv_copy
 
-
 if __name__ == "__main__":
-    url, tab, copyfile = run(STORE_URL)
-    print("Done!")
-    print("Sheet:", url)
-    print("Tab:", tab)
-    print("Download CSV:", copyfile)
+    run(STORE_URL)

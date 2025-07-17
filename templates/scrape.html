@@ -1,6 +1,13 @@
 <!-- templates/scrape.html -->
 {% extends "base.html" %} {% block content %}
 <h2>DoorDash Scraper</h2>
+
+<!-- NOTE: This tool must be run locally! -->
+<div class="alert alert-warning" role="alert">
+  ⚠️ <strong>Local-only:</strong> This scraper interacts with DoorDash’s website
+  and must be run on your local machine (not on a public server).
+</div>
+
 <form method="post" class="mb-3">
   <div class="input-group">
     <input

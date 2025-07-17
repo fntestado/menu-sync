@@ -15,6 +15,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import csv
 import time
+import socket
 
 # ─── CONFIG ──────────────────────────────────────────────────
 SERVICE_ACCOUNT_FILE = "doordash-scraper-466104-fb93a3a8694e.json"
@@ -25,32 +26,41 @@ SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive'
 ]
+# set a global socket timeout (so every HTTP call will time out after 60s)
+socket.setdefaulttimeout(60)
 # ─────────────────────────────────────────────────────────────
 
 def upload_to_sheets():
-    print('DEBUG 1')
     # 1) authorize
     creds = ServiceAccountCredentials.from_json_keyfile_name(
         SERVICE_ACCOUNT_FILE, SCOPES
     )
     gc = gspread.authorize(creds)
 
-    # 2) open existing spreadsheet and add a new worksheet
+    # 2) open spreadsheet, add sheet
     new_title = "Run " + time.strftime("%Y-%m-%d %H:%M")
     ss = gc.open_by_key(SPREADSHEET_ID)
     ws = ss.add_worksheet(title=new_title, rows="1000", cols="10")
-    print('DEBUG 2')
 
-    # 3) load CSV into memory
+    # 3) load CSV
     with open(OUTPUT_CSV, encoding="utf-8") as f:
         data = list(csv.reader(f))
 
-    # 4) write it starting at A1
-    ws.update("A1", data)
-    print('DEBUG 3')
+    # 4) write it starting at A1, with retries
+    max_tries = 3
+    for attempt in range(1, max_tries + 1):
+        try:
+            ws.update("A1", data)
+            break
+        except Exception as e:
+            print(f"⚠️ Update attempt {attempt}/{max_tries} failed: {e}")
+            if attempt == max_tries:
+                raise RuntimeError("Failed to push to Sheets after multiple tries") from e
+            backoff = 2 ** attempt
+            print(f"⏳ Retrying in {backoff}s…")
+            time.sleep(backoff)
 
     print(f"✅ Appended new tab '{new_title}' in spreadsheet {SPREADSHEET_ID}")
-    # 5) return the sheet URL and the new tab name
     return ss.url, new_title
 
 
