@@ -49,7 +49,7 @@ def upload_to_orders(csv_path: str, brand: str, location: str):
     df = pd.read_csv(csv_path)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         context = (
             browser.new_context(storage_state=COOKIES_FILE)
             if os.path.exists(COOKIES_FILE)
