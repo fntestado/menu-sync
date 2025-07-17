@@ -23,25 +23,30 @@ def select_brand_and_location(page, brand: str, location: str):
     pop.wait_for(state="visible")
 
     # 2) pick the brand
-    brands_ul = pop.locator("ul").first
-    brands_ul.locator(f"li:has-text('{brand}')").first.click()
+    pop.locator("ul").first.locator(f"li:has-text('{brand}')").click()
     page.wait_for_timeout(500)
 
-    # 3) type into the Locations filter textarea
-    #    clear any existing text then fill in our location substring
+    # 3) filter the locations
     loc_textarea = pop.locator('textarea[placeholder="All Locations..."]').first
-    loc_textarea.fill("")               # clear
-    loc_textarea.type(location, delay=50)  # type it in
+    loc_textarea.fill("")  
+    # type a shorter, distinctive chunk to make matching reliable:
+    # e.g. drop trailing punctuation, country, etc.
+    snippet = ", ".join(location.split(",")[:2])  # "35-35 Leverich Street b522, NY 11372"
+    loc_textarea.type(snippet, delay=50)
 
-    # 4) wait for the filtered results to appear, then click the first one
-    locs_ul = pop.locator("ul").nth(1)
-    # ensure at least one matching <li> appears
-    locs_ul.locator("li").first.wait_for(state="visible", timeout=5000)
-    locs_ul.locator("li").first.click()
+    # 4) wait specifically for a real entry (not the “No options” placeholder)
+    real_loc = pop.locator(
+        "ul:nth-of-type(2) li.MuiListItem-root:not(:has-text('No options'))"
+    )
+    try:
+        real_loc.first.wait_for(state="visible", timeout=5000)
+    except TimeoutError:
+        raise RuntimeError(f"No matching location found for “{location}” (tried “{snippet}”)")
+    real_loc.first.click()
 
-    # 5) apply selection
+    # 5) apply
     pop.locator("button#businessList, button:has-text('Apply')").click()
-    page.wait_for_timeout(2000)
+    page.wait_for_timeout(1000)
 
 
 def upload_to_orders(csv_path: str, brand: str, location: str):
